@@ -14,31 +14,56 @@ class Api
 
     private $request;
 
+    private $middleware;
+
     protected $data;
 
     protected $matches;
 
     public function __construct(
         RouterInterface $router,
-        RequestInterface $request
+        RequestInterface $request,
+        $middleware = []
     ) {
         $this->router = $router;
         $this->request = $request;
+        $this->middleware = $middleware;
     }
 
     public function call(
         $method,
         $pattern,
-        $action
+        $action,
+        $private = true
     ) {
         $this->router->setUriPattern($pattern);
+        $this->setAction($action);
         $this->setData();
 
         if ($this->request->getMethod() === $method &&
             $this->router->hasMatches()
         ) {
-            \call_user_func([$this, $action], $this->getData());
+            if ($private) {
+                $this->runMiddleware();
+            } else {
+                $this->runService();
+            }
         }
+    }
+
+    public function runService()
+    {
+        \call_user_func([$this, $this->action], $this->getData());
+    }
+
+    public function setAction($action)
+    {
+        $this->action = $action;
+    }
+
+    public function getAction()
+    {
+        return $this->action;
     }
 
     public function setData()
@@ -54,5 +79,14 @@ class Api
     public function getId()
     {
         return array_pop($this->matches);
+    }
+
+    public function runMiddleware()
+    {
+        foreach ($this->middleware as $class) {
+            (new $class)->handle(function () {
+                $this->runService();
+            });
+        }
     }
 }
